@@ -1,90 +1,129 @@
-//
-// COMP 371 Assignment Framework
-//
+// COMP 371 Assignment 1
 // Created by Jahrel Stewart
-//
-// Inspired by the following tutorials:
-// - https://learnopengl.com/Getting-started/Hello-Window
-// - https://learnopengl.co m/Getting-started/Hello-Triangle
 
 #include <iostream>
+#include<fstream>
+#include<string>
+#include <sstream>
 
+#include "opengl.h"
 
-#define GLEW_STATIC 1   // This allows linking with Static Library on Windows, without DLL
-#include <GL/glew.h>    // Include GLEW - OpenGL Extension Wrangler
+int gridSize = 100;
+int totalTiles = (int) (pow(gridSize, 2.0) + 0.5);
+int wallSize = 5;
+int totalWallCubes = (int) (pow(wallSize, 2.0) + 0.5);
+int wallCubeExclude = 0;
+int amtCubeVertices = 0;
 
-#include <GLFW/glfw3.h> // GLFW provides a cross-platform interface for creating a graphical context,
-                        // initializing OpenGL and binding inputs
+//Camera essential properties:
+glm::vec3 cameraPos = glm::vec3(0.0f, 20.0f, 60.0f);
+glm::vec3 cameraLookAt = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraDirection = glm::normalize(cameraPos - cameraLookAt);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 cameraRightDirection = glm::cross(cameraUp, cameraDirection);
 
-#include <glm/glm.hpp>  // GLM is an optimized math library with syntax to similar to OpenGL Shading Language
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+glm::mat4 scaleModelMatrix = glm::mat4(1.0f);
+float growModel = 1.005f;
+float shrinkModel = 0.995f;
+glm::mat4 rotateModelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+float rotateModel = 5.0f;
+glm::mat4 moveModelMatrix = glm::mat4(1.0f);
+float moveModel = 0.5f;
+glm::mat4 worldOrientMatrix = glm::mat4(1.0f);
+float worldOrient = 0.5f;
+glm::vec2 camMove(-90.0f, 0.0f), preCamMove(-90.0f, 0.0f);
+float zoom = 55.0f, preZoom = 55.0f;
+bool checkPos = true;
+glm::vec2 lastPos(0.0f, 0.0f);
 
-int grid_size = 100;
-int totalTiles = (int) (pow(grid_size, 2.0) + 0.5);
+float modelDimensions = 20.0f;
 
-const char* getThreeLinesShaderSource() {
-    // TODO - Insert Vertex Shaders here  ...
-    // For now, you use a string for your shader code, in the assignment, shaders will be stored in .glsl files
-    const char* vs = R"glsl(
-        #version 330 core
-        layout (location = 3) in vec3 aLinePos;
-        layout (location = 4) in vec3 aLineColor;
-        out vec3 vertexColor;
+struct Shaders {
+    std::string GridShaderSource;
+    std::string ThreeLineShaderSource;
+    std::string WallShaderSource;
+    std::string CubeShaderSource;
+    std::string FragmentShaderSource;
+    std::string CubeFragmentShaderSource;
+};
 
-        uniform mat4 u_Model_View_Projection;        
+static Shaders readShaders(const std::string& file) {
+    std::ifstream stream(file);
 
-        void main()
-        {
-            vertexColor = aLineColor;
-            gl_Position = u_Model_View_Projection * vec4(aLinePos, 1.0);
+    enum class whichShader {
+        EMPTY = -1, GRIDSHADER = 0, THREELINESHADER = 1, WALLSHADER = 2, CUBESHADER = 3, FRAGMENTSHADER = 4, CUBEFRAGMENTSHADER = 5
+    };
+
+    std::stringstream shaderStream[6];
+    std::string line;
+    whichShader which = whichShader::EMPTY;
+
+    while (getline(stream, line)) {
+        if (line.find("#shader") != std::string::npos) {
+            if (line.find("gridShader") != std::string::npos) {
+                which = whichShader::GRIDSHADER;
+            }
+            else if (line.find("threeLineShader") != std::string::npos) {
+                which = whichShader::THREELINESHADER;
+            }
+            else if (line.find("wallShader") != std::string::npos) {
+                which = whichShader::WALLSHADER;
+            }
+            else if (line.find("cubeShader") != std::string::npos) {
+                which = whichShader::CUBESHADER;
+            }
+            else if (line.find("fragmentShader") != std::string::npos) {
+                which = whichShader::FRAGMENTSHADER;
+            }
+            else if (line.find("cubeFragmentShader") != std::string::npos) {
+                which = whichShader::CUBEFRAGMENTSHADER;
+            }
         }
-    )glsl";
+        else {
+            shaderStream[(int) which] << line << '\n';
+        }
+    }
 
-    return vs;
+    return { shaderStream[0].str(), shaderStream[1].str(), shaderStream[2].str(), shaderStream[3].str(), shaderStream[4].str(), shaderStream[5].str() };
 }
 
-const char* getVertexShaderSource() {
-    // TODO - Insert Vertex Shaders here  ...
-    // For now, you use a string for your shader code, in the assignment, shaders will be stored in .glsl files
-    const char* vs = R"glsl(
-        #version 330 core
-        layout (location = 0) in vec3 aPos;
-        layout (location = 1) in vec3 aColor;
-        layout (location = 2) in vec3 offsetPos;
-        out vec3 vertexColor;
+void mouseCalculations(GLFWwindow* window, double currentXpos, double currentYpos) {
+    if (checkPos) {
+        lastPos.x = currentXpos;
+        lastPos.y = currentYpos;
+        checkPos = false;
+    }
 
-        uniform mat4 u_Model_View_Projection;        
+    zoom = preZoom;
+    camMove.x = preCamMove.x;
+    camMove.y = preCamMove.y;
 
-        void main()
-        {
-            vertexColor = aColor;
-            gl_Position = u_Model_View_Projection * vec4(aPos + offsetPos, 1.0);
-        }
-    )glsl";
+    float offsetX = lastPos.x - currentXpos;
+    camMove.x += offsetX * 0.15f;
 
-    return vs;
+    float offsetY = lastPos.y - currentYpos;
+    zoom += offsetY * 0.1f;
+
+    float camMoveOffsetY = currentYpos - lastPos.y;
+    camMove.y += camMoveOffsetY * 0.15f;
+
+
+    if (zoom >= 150.0f) {
+        zoom = 150.0f;
+    }
+    if (zoom <= 2.0f) {
+        zoom = 2.0f;
+    }
+
+    camMove.y = std::max(-85.0f, std::min(85.0f, camMove.y));
+
+    lastPos.x = currentXpos;
+    lastPos.y = currentYpos;
 }
 
-
-const char* getFragmentShaderSource() {
-    // TODO - Insert Fragment Shaders here ...
-    const char* fs = R"glsl(
-        #version 330 core
-        in vec3 vertexColor;
-        out vec4 FragColor;
-        void main()
-        {
-            FragColor = vec4(vertexColor.r, vertexColor.g, vertexColor.b, 1.0f);
-        }
-    )glsl";
-
-    return fs;
-}
-
-int setupVertexAndFragmentShader(GLuint shaderType, const char& shaderSRC) {
+int setupVertexAndFragmentShader(GLuint shaderType, const std::string& shaderSRC) {
     int shader = glCreateShader(shaderType);
-    const char* shaderSource = &shaderSRC;
+    const char* shaderSource = shaderSRC.c_str();
     glShaderSource(shader, 1, &shaderSource, nullptr);
     glCompileShader(shader);
 
@@ -100,7 +139,7 @@ int setupVertexAndFragmentShader(GLuint shaderType, const char& shaderSRC) {
     return shader;
 }
 
-int compileAndLinkShaders(const char& vertexShaderSRC, const char& fragmentShaderSRC) {
+int compileAndLinkShaders(const std::string& vertexShaderSRC, const std::string& fragmentShaderSRC) {
     // TODO
     // compile and link shader program
     // return shader program id
@@ -138,7 +177,7 @@ int createVertexArrayObject() {
     // Upload geometry to GPU and return the Vertex Buffer Object ID
 
     //ground surafce vertex points
-    glm::vec3 vertexArray[] = {
+    glm::vec3 gridVertexArray[] = {
         //positions                   colors
         glm::vec3(-0.5f, -0.5f, 0.0f), glm::vec3((float) 170 / 255, (float) 185 / 255, (float) 207 / 255),
         glm::vec3(-0.5f, 0.5f, 0.0f), glm::vec3((float) 170 / 255, (float) 185 / 255, (float) 207 / 255),
@@ -147,55 +186,124 @@ int createVertexArrayObject() {
     };
 
     //creating indexes for index buffer to avoid dupilicate vertices
-    unsigned int indexes[] = {
+    unsigned int gridIndexes[] = {
         0, 1, 2,
         2, 3, 0
     };
 
     //We create the 100 x 100 grid here to avoid calling the draw-call many times. This will boost performance
-    glm::vec3 quadPositons[10000];
-    int index = 0;
-    //offset centers all tiles around the origin for both X and Z planes
-    float offset = float((grid_size / 2.0f) - 0.5f);
-    //Draw each tile row by row on the XZ plane
-    for (int i = 0; i < grid_size; i++) {
-        for (int j = 0; j < grid_size; j++) {
+    glm::vec3 quadPositons[totalTiles];
+    int gridIndex = 0;
+    //offset centers all tiles around the origin for both X and Y planes....later will rotate the model 90 degrees so that it flat on the XZ plane
+    float gridOffset = float((gridSize / 2.0f) - 0.5f);
+    //Draw each tile row by row on the XY plane
+    for (int i = 0; i < gridSize; i++) {
+        for (int j = 0; j < gridSize; j++) {
             glm::vec3 quadPos;
-            quadPos.x = (float) (j - offset);
-            quadPos.y = (float) (i - offset);
+            quadPos.x = (float) (j - gridOffset);
+            quadPos.y = (float) (i - gridOffset);
             quadPos.z = 0.0f;
-            quadPositons[index++] = quadPos;
+            quadPositons[gridIndex++] = quadPos;
         }
     }
 
     //Vertices for set of three lines
     glm::vec3 threeLinesVertexArray[] = {
-        //pos                color
+        //positions                  color
         glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), //x axis line start-point
-        glm::vec3(0.5f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), //x axis line end-point 
+        glm::vec3(5.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), //x axis line end-point 
         glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), //y axis line start-point 
-        glm::vec3(0.0f, 0.5f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), //y axis line end-point 
+        glm::vec3(0.0f, 5.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), //y axis line end-point 
         glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f),  //z axis line start-point 
-        glm::vec3(0.0f, 0.0f, 0.5f), glm::vec3(0.0f, 0.0f, 1.0f)  //z axis line end-point 
+        glm::vec3(0.0f, 0.0f, 5.0f), glm::vec3(0.0f, 0.0f, 1.0f)  //z axis line end-point 
     };
 
-    // Create a vertex array
+    //Vertices for Wall
+    glm::vec3 wallVertexArray[] = {
+        //positions                     
+        glm::vec3(-2.0f, -2.0f, 1.0f), //0
+        glm::vec3(-2.0f, 2.0f, 1.0f), //1
+        glm::vec3(2.0f, 2.0f, 1.0f),  //2
+        glm::vec3(2.0f, -2.0f, 1.0f),  //3
+        glm::vec3(-2.0f, -2.0f, -1.0f), //4
+        glm::vec3(-2.0f, 2.0f, -1.0f), //5
+        glm::vec3(2.0f, -2.0f, -1.0f), //6
+        glm::vec3(2.0f, 2.0f, -1.0f), //7
+    };
+
+    //We create the 5x5 grid here to avoid calling the draw-call many times. This will boost performance
+    glm::vec3 wallPositons[totalWallCubes];
+    int wallIndex = 0;
+    //offset centers all cubes around the origin for both X and Y planes
+    float wallOffset = float(((wallSize * 4) / 2.0f) - 2.0f);
+    //Draw each tile row by row on the XY plane
+    for (int i = 0; i < (4 * wallSize); i = i + 4) {
+        for (int j = 0; j < (4 * wallSize); j = j + 4) {
+            if (((i >= 4 && i <= 8) && (j >= 4 && j <= 12)) || (i == 12 && j == 8)) {
+                wallCubeExclude++;
+                continue;
+            }
+
+            glm::vec3 wallPos;
+            wallPos.x = (float) (j - wallOffset);
+            wallPos.y = (float) (i - wallOffset) + 20.0f;
+            wallPos.z = 0.0f;
+            wallPositons[wallIndex++] = wallPos;
+        }
+    }
+
+    glm::vec3 cubesVertexArray[] = {
+        //positions                     
+        glm::vec3(-2.0f, 18.0f, 14.0f), //0
+        glm::vec3(-2.0f, 22.0f, 14.0f), //1
+        glm::vec3(2.0f, 22.0f, 14.0f),  //2
+        glm::vec3(2.0f, 18.0f, 14.0f),  //3
+        glm::vec3(-2.0f, 18.0f, 10.0f), //4
+        glm::vec3(-2.0f, 22.0f, 10.0f), //5
+        glm::vec3(2.0f, 18.0f, 10.0f), //6
+        glm::vec3(2.0f, 22.0f, 10.0f), //7
+    };
+
+    //creating indexes for index buffer to avoid dupilicate vertices when creating a cube
+    unsigned int cubeIndexes[] = {
+        0, 1, 2, //Front Face
+        2, 3, 0,
+
+        4, 5, 1, //Left Face
+        1, 0, 4,
+
+        6, 7, 5, //Back Face
+        5, 4, 6,
+
+        3, 2, 7, //Right Face
+        7, 6, 3,
+
+        3, 6, 4, // Bottom Face
+        4, 0, 3,
+
+        1, 5, 7, // Top Face
+        7, 2, 1
+    };
+
+    amtCubeVertices = sizeof(cubeIndexes) / sizeof(*cubeIndexes);
+
+    // Create a vertex array    
     GLuint vertexArrayObject;
     glGenVertexArrays(1, &vertexArrayObject);
     glBindVertexArray(vertexArrayObject);
 
     // Upload Vertex Buffer to the GPU, keep a reference to it (vertexBufferObject)
-    GLuint vertexBufferObject;
-    glGenBuffers(1, &vertexBufferObject);
-    glBindBuffer(GL_ARRAY_BUFFER, vertexBufferObject);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertexArray), vertexArray, GL_STATIC_DRAW);
+    GLuint gridVertexBufferObject;
+    glGenBuffers(1, &gridVertexBufferObject);
+    glBindBuffer(GL_ARRAY_BUFFER, gridVertexBufferObject);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(gridVertexArray), gridVertexArray, GL_STATIC_DRAW);
 
-    glVertexAttribPointer(0,                   // attribute 0 matches a Pos in Vertex Shader
-        3,                   // size
-        GL_FLOAT,            // type
-        GL_FALSE,            // normalized?
-        2 * sizeof(glm::vec3), // stride - each vertex contain 2 vec3 (position, color)
-        (void*) 0             // array buffer offset
+    glVertexAttribPointer(0,                    // attribute 0 matches a Pos in Vertex Shader
+        3,                                      // size
+        GL_FLOAT,                               // type
+        GL_FALSE,                               // normalized?
+        2 * sizeof(glm::vec3),                  // stride - each vertex contain 2 vec3 (position, color)
+        (void*) 0                               // array buffer offset
     );
     glEnableVertexAttribArray(0);
 
@@ -208,16 +316,10 @@ int createVertexArrayObject() {
     );
     glEnableVertexAttribArray(1);
 
-    //Index Buffer
-    GLuint indexBufferObject;
-    glGenBuffers(1, &indexBufferObject);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, indexBufferObject);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * sizeof(unsigned int), indexes, GL_STATIC_DRAW);
-
-    //object instances
-    GLuint instancesBufferObject;
-    glGenBuffers(1, &instancesBufferObject);
-    glBindBuffer(GL_ARRAY_BUFFER, instancesBufferObject);
+    //grid instances
+    GLuint gridInstancesBufferObject;
+    glGenBuffers(1, &gridInstancesBufferObject);
+    glBindBuffer(GL_ARRAY_BUFFER, gridInstancesBufferObject);
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * totalTiles, &quadPositons[0], GL_STATIC_DRAW);
 
     glVertexAttribPointer(2,
@@ -229,6 +331,14 @@ int createVertexArrayObject() {
     );
     glEnableVertexAttribArray(2);
     glVertexAttribDivisor(2, 1);
+
+
+    //Grid Index Buffer
+    GLuint gridIndexBufferObject;
+    glGenBuffers(1, &gridIndexBufferObject);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, gridIndexBufferObject);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 6 * sizeof(unsigned int), gridIndexes, GL_STATIC_DRAW);
+
 
     //vertex object array for three axis lines
     GLuint threeLinesBufferObject;
@@ -254,7 +364,67 @@ int createVertexArrayObject() {
     );
     glEnableVertexAttribArray(4);
 
-    glBindVertexArray(0); // Unbind to not modify the VAO
+    // vertex object array for Wall
+    GLuint wallBufferObject;
+    glGenBuffers(1, &wallBufferObject);
+    glBindBuffer(GL_ARRAY_BUFFER, wallBufferObject);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(wallVertexArray), wallVertexArray, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(5,                    // attribute 0 matches a Pos in Vertex Shader
+        3,                                      // size
+        GL_FLOAT,                               // type
+        GL_FALSE,                               // normalized?
+        sizeof(glm::vec3),                      // stride - each vertex contain 2 vec3 (position, color)
+        (void*) 0                               // array buffer offset
+    );
+    glEnableVertexAttribArray(5);
+
+
+    //wall cube instances
+    GLuint wallInstancesBufferObject;
+    glGenBuffers(1, &wallInstancesBufferObject);
+    glBindBuffer(GL_ARRAY_BUFFER, wallInstancesBufferObject);
+    glBufferData(GL_ARRAY_BUFFER, (totalWallCubes - wallCubeExclude) * sizeof(glm::vec3), &wallPositons[0], GL_STATIC_DRAW);
+
+    glVertexAttribPointer(6,
+        3,
+        GL_FLOAT,
+        GL_FALSE,
+        sizeof(glm::vec3),
+        (void*) 0
+    );
+    glEnableVertexAttribArray(6);
+    glVertexAttribDivisor(6, 1);
+
+    //Wall Index Buffer
+    GLuint wallIndexBufferObject;
+    glGenBuffers(1, &wallIndexBufferObject);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, wallIndexBufferObject);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, amtCubeVertices * sizeof(unsigned int), cubeIndexes, GL_STATIC_DRAW);
+
+    // vertex object array for Wall
+    GLuint cubesBufferObject;
+    glGenBuffers(1, &cubesBufferObject);
+    glBindBuffer(GL_ARRAY_BUFFER, cubesBufferObject);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(cubesVertexArray), cubesVertexArray, GL_STATIC_DRAW);
+
+    glVertexAttribPointer(7,                   // attribute 0 matches a Pos in Vertex Shader
+        3,                   // size
+        GL_FLOAT,            // type
+        GL_FALSE,            // normalized?
+        sizeof(glm::vec3), // stride - each vertex contain 2 vec3 (position, color)
+        (void*) 0             // array buffer offset
+    );
+    glEnableVertexAttribArray(7);
+
+
+    //Cube Index Buffer
+    GLuint cubesIndexBufferObject;
+    glGenBuffers(1, &cubesIndexBufferObject);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cubesIndexBufferObject);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, amtCubeVertices * sizeof(unsigned int), cubeIndexes, GL_STATIC_DRAW);
+
+    glBindVertexArray(0);
 
     return vertexArrayObject;
 }
@@ -263,17 +433,6 @@ int createVertexArrayObject() {
 int main(int argc, char* argv[]) {
     // Initialize GLFW and OpenGL version
     glfwInit();
-
-#if defined(PLATFORM_OSX)	
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-#else
-    // On windows, we set OpenGL version to 2.1, to support more hardware
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-#endif
 
     // Create Window and rendering context using GLFW, resolution is 800x600
     GLFWwindow* window = glfwCreateWindow(1024, 768, "Comp371 - Assignment 1", NULL, NULL);
@@ -284,7 +443,6 @@ int main(int argc, char* argv[]) {
     }
     glfwMakeContextCurrent(window);
 
-
     // Initialize GLEW
     glewExperimental = true; // Needed for core profile
     if (glewInit() != GLEW_OK) {
@@ -293,41 +451,137 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    Shaders shader = readShaders("shaders/shaders.shader");
+
     // Smokey Dark Blue background
     glClearColor((float) 13 / 255, (float) 19 / 255, (float) 33 / 255, 1.0f);
-
-    // Compile and link shaders here ...
-    int shaderProgram = compileAndLinkShaders(*getVertexShaderSource(), *getFragmentShaderSource());
 
     // Define and upload geometry to the GPU here ...
     int vao = createVertexArrayObject();
 
-    //calculate model matrix..which is the transform of the object we want to draw 
-    glm::mat4 model = glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f)); //Rotate grid 90 degrees so that it lays flat on the XZ plane
+    //calculate view matrix..which is essentially the view of the camera        
+    glm::mat4 view = glm::lookAt(cameraPos, cameraPos + cameraLookAt, cameraUp);
 
-    //calculate view matrix..which is essentially the view of the camera         
-    glm::mat4 view = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.5f, -80.0f));
-    view = glm::rotate(view, glm::radians(20.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    //create projection matrix
+    glm::mat4 projection = glm::perspective(glm::radians(zoom), (float) 1024 / (float) 768, 0.1f, 100.0f);
 
-    //create projection matrix...which is like mapping the coordinates of the current space to -1 to 1 space
-    glm::mat4 projection = glm::perspective(glm::radians(55.0f), (float) 1024 / (float) 768, 0.1f, 100.0f);
+    glm::mat4 cubePos[] = { glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(-4.0f, 0.0f, 4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(-4.0f, -4.0f, 4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(4.0f, 0.0f, 4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 4.0f, 4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(4.0f, -4.0f, 4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 4.0f, -4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -4.0f, -4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(-4.0f, -4.0f, -4.0f)),
+                            glm::translate(glm::mat4(1.0f), glm::vec3(4.0f, -4.0f, -4.0f))
+    };
 
-    glUseProgram(shaderProgram);
-    int model_location = glGetUniformLocation(shaderProgram, "u_Model_View_Projection");
-    glm::mat4 transformation_result = projection * view * model;
-    glUniformMatrix4fv(model_location, 1, GL_FALSE, glm::value_ptr(transformation_result));
 
+    glfwSetCursorPosCallback(window, mouseCalculations);
+    glEnable(GL_DEPTH_TEST);
+    int shaderProgram;
     // std::cout << glGetString(GL_VERSION);
+    // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);    
 
     // Entering Main Loop
     while (!glfwWindowShouldClose(window)) {
         // Each frame, reset color of each pixel to glClearColor
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glBindVertexArray(vao);
-        glDrawArraysInstanced(GL_LINE_LOOP, 0, 4, totalTiles);
-        // glDrawArrays(GL_LINES, 0, 6);
-        // glLineWidth(5.0f);
+
+        //Draw the grid
+        {
+            //calculate model matrix..which is the transform of the Grid
+            glm::mat4 model = worldOrientMatrix * glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f)); //Rotate grid 90 degrees so that it lays flat on the XZ plane
+            int shaderProgram = compileAndLinkShaders(shader.GridShaderSource, shader.FragmentShaderSource);
+            glUseProgram(shaderProgram);
+            int model_location = glGetUniformLocation(shaderProgram, "u_Model_View_Projection");
+            glm::mat4 transformation_result = projection * view * model;
+            glUniformMatrix4fv(model_location, 1, GL_FALSE, glm::value_ptr(transformation_result));
+
+            glLineWidth(1.0f);
+            glDrawElementsInstanced(GL_LINE_LOOP, 5, GL_UNSIGNED_INT, nullptr, totalTiles);
+        }
+
+        //Draw three-colored axis lines
+        {
+            glm::mat4 model = worldOrientMatrix * glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+            int shaderProgram = compileAndLinkShaders(shader.ThreeLineShaderSource, shader.FragmentShaderSource);
+            glUseProgram(shaderProgram);
+            int model_location = glGetUniformLocation(shaderProgram, "u_Model_View_Projection");
+            glm::mat4 transformation_result = projection * view * model;
+            glUniformMatrix4fv(model_location, 1, GL_FALSE, glm::value_ptr(transformation_result));
+
+            glLineWidth(5.0f);
+            glDrawArrays(GL_LINES, 0, 6);
+        }
+
+        //Draw Wall
+        {
+            // Translate to origin, then scale and then translate back to original position. This will cause the scaling to happen from the origin of the object
+            glm::mat4 model = worldOrientMatrix;
+            model *= moveModelMatrix;
+            model *= rotateModelMatrix;
+            model *= glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -modelDimensions + 20.0f, 0.0f)) * scaleModelMatrix * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+
+            int shaderProgram = compileAndLinkShaders(shader.WallShaderSource, shader.CubeFragmentShaderSource);
+            glUseProgram(shaderProgram);
+            int model_location_MVP = glGetUniformLocation(shaderProgram, "u_Model_View_Projection");
+            int model_location_Color = glGetUniformLocation(shaderProgram, "u_Color");
+
+            glm::mat4 transformation_result = projection * view * model;
+            glm::vec3 color = glm::vec3((float) 102 / 255, (float) 215 / 255, (float) 209 / 255);
+            glUniformMatrix4fv(model_location_MVP, 1, GL_FALSE, glm::value_ptr(transformation_result));
+            glUniform3f(model_location_Color, color.x, color.y, color.z);
+
+            glLineWidth(1.0f);
+            glDrawElementsInstanced(GL_TRIANGLES, amtCubeVertices, GL_UNSIGNED_INT, nullptr, totalWallCubes - wallCubeExclude);
+        }
+
+        //Draw Cubes
+        glm::mat4 parentCube;
+
+        for (int i = 0; i < 12; i++) {
+            glm::mat4 model;
+            if (i == 0) {
+                model = worldOrientMatrix;
+
+                model *= moveModelMatrix;
+                model *= rotateModelMatrix;
+                model *= glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -modelDimensions + 20.0f, 0.0f)) * scaleModelMatrix * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+                parentCube = model;
+            }
+            else {
+                model = parentCube;
+                model *= cubePos[i - 1];
+            }
+
+            int shaderProgram = compileAndLinkShaders(shader.CubeShaderSource, shader.CubeFragmentShaderSource);
+            glUseProgram(shaderProgram);
+            int model_location_MVP = glGetUniformLocation(shaderProgram, "u_Model_View_Projection");
+            int model_location_Color = glGetUniformLocation(shaderProgram, "u_Color");
+
+            glm::mat4 transformation_result = projection * view * model;
+
+            glUniformMatrix4fv(model_location_MVP, 1, GL_FALSE, glm::value_ptr(transformation_result));
+
+            glLineWidth(2.0f);
+
+            //Draw Cube Lines (Optional...for aesthetic purposes):
+            // glm::vec3 color = glm::vec3((float) 128 / 255, (float) 128 / 255, (float) 128 / 255);
+            // glUniform3f(model_location_Color, color.x, color.y, color.z);
+            // glDrawElements(GL_LINE_LOOP, 30, GL_UNSIGNED_INT, nullptr);
+
+            glLineWidth(1.0f);
+            //Color Cube Faces
+            glm::vec3 color = glm::vec3((float) 233 / 255, (float) 230 / 255, (float) 255 / 255);
+            glUniform3f(model_location_Color, color.x, color.y, color.z);
+            glDrawElements(GL_TRIANGLES, amtCubeVertices, GL_UNSIGNED_INT, nullptr);
+
+        }
 
         glBindVertexArray(0);
 
@@ -339,8 +593,99 @@ int main(int argc, char* argv[]) {
 
         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
+
+        // Model Scale, Position, Rotate
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+            moveModelMatrix = glm::translate(moveModelMatrix, glm::vec3(-moveModel, 0.0f, 0.0f));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+            moveModelMatrix = glm::translate(moveModelMatrix, glm::vec3(moveModel, 0.0f, 0.0f));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+            moveModelMatrix = glm::translate(moveModelMatrix, glm::vec3(0.0f, 0.0f, -moveModel));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+            moveModelMatrix = glm::translate(moveModelMatrix, glm::vec3(0.0f, 0.0f, moveModel));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS) {
+            rotateModelMatrix = glm::rotate(rotateModelMatrix, glm::radians(-rotateModel), glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS) {
+            rotateModelMatrix = glm::rotate(rotateModelMatrix, glm::radians(rotateModel), glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS) {
+            scaleModelMatrix = glm::scale(scaleModelMatrix, glm::vec3(growModel, growModel, growModel));
+            modelDimensions *= growModel;
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS) {
+            scaleModelMatrix = glm::scale(scaleModelMatrix, glm::vec3(shrinkModel, shrinkModel, shrinkModel));
+            modelDimensions *= shrinkModel;
+        }
+
+        //World Orientation
+        if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(worldOrient), glm::vec3(1.0f, 0.0f, 0.0f));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(-worldOrient), glm::vec3(1.0f, 0.0f, 0.0f));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(worldOrient), glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(-worldOrient), glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_HOME) == GLFW_PRESS) {
+            worldOrientMatrix = glm::mat4(1.0f);
+        }
+
+        //Render Modes:
+        if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_POINT);
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_T) == GLFW_PRESS) {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
+
+        //Camera Pan,Tilt, Zoom:
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            projection = glm::perspective(glm::radians(zoom), (float) 1024 / (float) 768, 0.1f, 100.0f);
+            preZoom = zoom;
+        }
+
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+            cameraLookAt.x = cos(glm::radians(camMove.x)) * cos(glm::radians(preCamMove.y));
+            cameraLookAt.z = sin(glm::radians(camMove.x)) * cos(glm::radians(preCamMove.y));
+            view = glm::lookAt(cameraPos, cameraPos + glm::normalize(glm::vec3(cameraLookAt.x, cameraLookAt.y, cameraLookAt.z)), cameraUp);
+            preCamMove.x = camMove.x;
+        }
+
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
+            cameraLookAt.y = sin(glm::radians(camMove.y));
+            cameraLookAt.z = sin(glm::radians(preCamMove.x)) * cos(glm::radians(camMove.y));
+            view = glm::lookAt(cameraPos, cameraPos + glm::normalize(glm::vec3(cameraLookAt.x, cameraLookAt.y, cameraLookAt.z)), cameraUp);
+            preCamMove.y = camMove.y;
+        }
+
     }
 
+    glDeleteProgram(shaderProgram);
     // Shutdown GLFW
     glfwTerminate();
 
