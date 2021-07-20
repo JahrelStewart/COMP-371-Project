@@ -31,7 +31,8 @@ glm::mat4 moveModelMatrix = glm::mat4(1.0f);
 float moveModel = 0.5f;
 glm::mat4 worldOrientMatrix = glm::mat4(1.0f);
 float worldOrient = 0.5f;
-glm::vec2 camMove(-90.0f, 0.0f), preCamMove(-90.0f, 0.0f);
+glm::vec2 camPanTiltZoom(-90.0f, 0.0f), preCamPanTiltZoom(-90.0f, 0.0f);
+glm::vec2 camWorldOrient(0.0f, 0.0f), preCamWorldOrient(0.0f, 0.0f);
 float zoom = 55.0f, preZoom = 55.0f;
 bool checkPos = true;
 glm::vec2 lastPos(0.0f, 0.0f);
@@ -95,17 +96,21 @@ void mouseCalculations(GLFWwindow* window, double currentXpos, double currentYpo
     }
 
     zoom = preZoom;
-    camMove.x = preCamMove.x;
-    camMove.y = preCamMove.y;
+    camPanTiltZoom.x = preCamPanTiltZoom.x;
+    camPanTiltZoom.y = preCamPanTiltZoom.y;
+    camWorldOrient.x = preCamWorldOrient.x;
+    camWorldOrient.y = preCamWorldOrient.y;
 
     float offsetX = lastPos.x - currentXpos;
-    camMove.x += offsetX * 0.15f;
+    camPanTiltZoom.x += offsetX * 0.15f;
+    camWorldOrient.x += offsetX * 0.15f;
 
     float offsetY = lastPos.y - currentYpos;
     zoom += offsetY * 0.1f;
 
     float camMoveOffsetY = currentYpos - lastPos.y;
-    camMove.y += camMoveOffsetY * 0.15f;
+    camPanTiltZoom.y += camMoveOffsetY * 0.15f;
+    camWorldOrient.y += camMoveOffsetY * 0.15f;
 
 
     if (zoom >= 150.0f) {
@@ -115,7 +120,8 @@ void mouseCalculations(GLFWwindow* window, double currentXpos, double currentYpo
         zoom = 2.0f;
     }
 
-    camMove.y = std::max(-85.0f, std::min(85.0f, camMove.y));
+    camPanTiltZoom.y = std::max(-85.0f, std::min(85.0f, camPanTiltZoom.y));
+    camWorldOrient.y = std::max(-85.0f, std::min(85.0f, camWorldOrient.y));
 
     lastPos.x = currentXpos;
     lastPos.y = currentYpos;
@@ -629,25 +635,56 @@ int main(int argc, char* argv[]) {
             modelDimensions *= shrinkModel;
         }
 
-        //World Orientation
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+            modelDimensions = 20.0f;
+            scaleModelMatrix = glm::mat4(1.0f);
+            rotateModelMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(0.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+            moveModelMatrix = glm::mat4(1.0f);
+        }
+
+        //World Orientation        
         if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
-            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(worldOrient), glm::vec3(1.0f, 0.0f, 0.0f));
+            cameraPos.x -= worldOrient;
+            view = glm::lookAt(cameraPos, cameraPos + cameraLookAt, cameraUp);
         }
 
         if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
-            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(-worldOrient), glm::vec3(1.0f, 0.0f, 0.0f));
+            cameraPos.x += worldOrient;
+            view = glm::lookAt(cameraPos, cameraPos + cameraLookAt, cameraUp);
         }
 
         if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(worldOrient), glm::vec3(0.0f, 1.0f, 0.0f));
+            cameraPos.z -= worldOrient;
+            view = glm::lookAt(cameraPos, cameraPos + cameraLookAt, cameraUp);
         }
 
         if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(-worldOrient), glm::vec3(0.0f, 1.0f, 0.0f));
+            cameraPos.z += worldOrient;
+            view = glm::lookAt(cameraPos, cameraPos + cameraLookAt, cameraUp);
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS && glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+            worldOrientMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(camWorldOrient.y), glm::vec3(1.0f, 0.0f, 0.0f));
+            worldOrientMatrix = glm::rotate(worldOrientMatrix, glm::radians(-camWorldOrient.x), glm::vec3(0.0f, 1.0f, 0.0f));
+
+            preCamWorldOrient.x = camWorldOrient.x;
+            preCamWorldOrient.y = camWorldOrient.y;
         }
 
         if (glfwGetKey(window, GLFW_KEY_HOME) == GLFW_PRESS) {
             worldOrientMatrix = glm::mat4(1.0f);
+            cameraLookAt = glm::vec3(0.0f, 0.0f, -1.0f);
+            cameraPos = glm::vec3(0.0f, 20.0f, 60.0f);
+            view = glm::lookAt(cameraPos, cameraPos + cameraLookAt, cameraUp);
+
+            zoom = 55.0f;
+            preZoom = 55.0f;
+            projection = glm::perspective(glm::radians(zoom), (float) 1024 / (float) 768, 0.1f, 100.0f);
+
+            camPanTiltZoom = glm::vec2(-90.0f, 0.0f);
+            preCamPanTiltZoom = glm::vec2(-90.0f, 0.0f);
+            camWorldOrient = glm::vec2(0.0f, 0.0f);
+            preCamWorldOrient = glm::vec2(0.0f, 0.0f);
         }
 
         //Render Modes:
@@ -664,23 +701,23 @@ int main(int argc, char* argv[]) {
         }
 
         //Camera Pan,Tilt, Zoom:
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_R) != GLFW_PRESS) {
             projection = glm::perspective(glm::radians(zoom), (float) 1024 / (float) 768, 0.1f, 100.0f);
             preZoom = zoom;
         }
 
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-            cameraLookAt.x = cos(glm::radians(camMove.x)) * cos(glm::radians(preCamMove.y));
-            cameraLookAt.z = sin(glm::radians(camMove.x)) * cos(glm::radians(preCamMove.y));
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_R) != GLFW_PRESS) {
+            cameraLookAt.x = cos(glm::radians(camPanTiltZoom.x)) * cos(glm::radians(preCamPanTiltZoom.y));
+            cameraLookAt.z = sin(glm::radians(camPanTiltZoom.x)) * cos(glm::radians(preCamPanTiltZoom.y));
             view = glm::lookAt(cameraPos, cameraPos + glm::normalize(glm::vec3(cameraLookAt.x, cameraLookAt.y, cameraLookAt.z)), cameraUp);
-            preCamMove.x = camMove.x;
+            preCamPanTiltZoom.x = camPanTiltZoom.x;
         }
 
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS) {
-            cameraLookAt.y = sin(glm::radians(camMove.y));
-            cameraLookAt.z = sin(glm::radians(preCamMove.x)) * cos(glm::radians(camMove.y));
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_MIDDLE) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_R) != GLFW_PRESS) {
+            cameraLookAt.y = sin(glm::radians(camPanTiltZoom.y));
+            cameraLookAt.z = sin(glm::radians(preCamPanTiltZoom.x)) * cos(glm::radians(camPanTiltZoom.y));
             view = glm::lookAt(cameraPos, cameraPos + glm::normalize(glm::vec3(cameraLookAt.x, cameraLookAt.y, cameraLookAt.z)), cameraUp);
-            preCamMove.y = camMove.y;
+            preCamPanTiltZoom.y = camPanTiltZoom.y;
         }
 
     }
@@ -691,5 +728,3 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-
