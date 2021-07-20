@@ -1,0 +1,13 @@
+﻿  glad.c
+  main.cpp
+C:\Users\garog\Documents\COMP371 ASSIGNMENT\Comp371Assi\Shader.h(45,40): warning C4101: 'e': unreferenced local variable
+C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\main.cpp(248,28): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\main.cpp(376,17): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\main.cpp(377,17): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\main.cpp(381,19): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\main.cpp(382,19): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\main.cpp(384,13): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\main.cpp(385,13): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\main.cpp(394,31): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+LINK : warning LNK4098: defaultlib 'MSVCRT' conflicts with use of other libs; use /NODEFAULTLIB:library
+  Comp371Assi.vcxproj -> C:\Users\garog\Documents\GitHub\COMP-371-Project\Comp371Assi\Debug\Comp371Assi.exe
