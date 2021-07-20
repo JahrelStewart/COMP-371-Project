@@ -1,0 +1,25 @@
+﻿  lab01.cpp
+C:\Users\jahre\Documents\School Work\COMP 371\work\Framework\Source\lab01.cpp(102,21): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\jahre\Documents\School Work\COMP 371\work\Framework\Source\lab01.cpp(103,21): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\jahre\Documents\School Work\COMP 371\work\Framework\Source\lab01.cpp(113,19): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\jahre\Documents\School Work\COMP 371\work\Framework\Source\lab01.cpp(117,19): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\jahre\Documents\School Work\COMP 371\work\Framework\Source\lab01.cpp(120,26): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\jahre\Documents\School Work\COMP 371\work\Framework\Source\lab01.cpp(135,17): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+C:\Users\jahre\Documents\School Work\COMP 371\work\Framework\Source\lab01.cpp(136,17): warning C4244: '=': conversion from 'double' to 'T', possible loss of data
+          with
+          [
+              T=float
+          ]
+  Labs.vcxproj -> C:\Users\jahre\Documents\School Work\COMP 371\work\Framework\Bin\Labs-Debug.exe
